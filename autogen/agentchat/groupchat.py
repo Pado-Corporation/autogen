@@ -44,6 +44,7 @@ class GroupChat:
     def next_agent(self, agent: Agent, agents: List[Agent]) -> Agent:
         """Return the next agent in the list."""
         if agents == self.agents:
+            logger.warning("Cannot find Exact One Agent to talk with.")
             return agents[(self.agent_names.index(agent.name) + 1) % len(agents)]
         else:
             offset = self.agent_names.index(agent.name) + 1
@@ -53,6 +54,7 @@ class GroupChat:
 
     def select_speaker_msg(self, agents: List[Agent]):
         """Return the message for selecting the next speaker."""
+        print(f"This is possbile list : {self._participant_roles()}")
         return f"""You are in a role play game. The following roles are available:
 {self._participant_roles()}.
 
@@ -64,10 +66,17 @@ Then select the next role from {[agent.name for agent in agents]} to play. Only 
         if self.func_call_filter and self.messages and "function_call" in self.messages[-1]:
             # find agents with the right function_map which contains the function name
             agents = [
-                agent for agent in self.agents if agent.can_execute_function(self.messages[-1]["function_call"]["name"])
+                agent
+                for agent in self.agents
+                if agent.can_execute_function(self.messages[-1]["function_call"]["name"])
             ]
             if len(agents) == 1:
                 # only one agent can execute the function
+                return agents[0]
+            elif len(agents) != 1:
+                logger.warning(
+                    "There are more than two agents can do that function. It is not recommened. Seperate Agent role and function map"
+                )
                 return agents[0]
             elif not agents:
                 # find all the agents with function_map
@@ -93,7 +102,7 @@ Then select the next role from {[agent.name for agent in agents]} to play. Only 
             + [
                 {
                     "role": "system",
-                    "content": f"Read the above conversation. Then select the next role from {[agent.name for agent in agents]} to play. Only return the role.",
+                    "content": f"Read the above conversation. Then select the next role from {[agent.name for agent in agents]} to play. Only return the role. Remember your purpose, Consider Priority to acheive goal.",
                 }
             ]
         )
@@ -130,7 +139,9 @@ class GroupChatManager(ConversableAgent):
             system_message=system_message,
             **kwargs,
         )
-        self.register_reply(Agent, GroupChatManager.run_chat, config=groupchat, reset_config=GroupChat.reset)
+        self.register_reply(
+            Agent, GroupChatManager.run_chat, config=groupchat, reset_config=GroupChat.reset
+        )
         # self._random = random.Random(seed)
 
     def run_chat(
@@ -160,6 +171,7 @@ class GroupChatManager(ConversableAgent):
             try:
                 # select the next speaker
                 speaker = groupchat.select_speaker(speaker, self)
+                print(f"Next Call Agent will be {speaker}")
                 # let the speaker speak
                 reply = speaker.generate_reply(sender=self)
             except KeyboardInterrupt:

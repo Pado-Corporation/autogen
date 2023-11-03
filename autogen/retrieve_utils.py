@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 import glob
 import tiktoken
 import chromadb
-from chromadb.api import API
+from chromadb.api import ClientAPI
 from chromadb.api.types import QueryResult
 import chromadb.utils.embedding_functions as ef
 import logging
@@ -103,7 +103,9 @@ def num_tokens_from_messages(
             if key == "name":
                 num_tokens += tokens_per_name
         num_tokens += tokens_per_message
-    num_tokens += custom_prime_count  # With ChatGPT, every reply is primed with <|start|>assistant<|message|>
+    num_tokens += (
+        custom_prime_count  # With ChatGPT, every reply is primed with <|start|>assistant<|message|>
+    )
     return num_tokens
 
 
@@ -146,14 +148,18 @@ def split_text_to_chunks(
                 lines[0] = lines[0][split_len:]
                 lines_tokens[0] = num_tokens_from_text(lines[0])
             else:
-                logger.warning("Failed to split docs with must_break_at_empty_line being True, set to False.")
+                logger.warning(
+                    "Failed to split docs with must_break_at_empty_line being True, set to False."
+                )
                 must_break_at_empty_line = False
         chunks.append(prev) if len(prev) > 10 else None  # don't add chunks less than 10 characters
         lines = lines[cnt:]
         lines_tokens = lines_tokens[cnt:]
         sum_tokens = sum(lines_tokens)
     text_to_chunk = "\n".join(lines)
-    chunks.append(text_to_chunk) if len(text_to_chunk) > 10 else None  # don't add chunks less than 10 characters
+    chunks.append(text_to_chunk) if len(
+        text_to_chunk
+    ) > 10 else None  # don't add chunks less than 10 characters
     return chunks
 
 
@@ -212,7 +218,9 @@ def split_files_to_chunks(
     return chunks
 
 
-def get_files_from_dir(dir_path: Union[str, List[str]], types: list = TEXT_FORMATS, recursive: bool = True):
+def get_files_from_dir(
+    dir_path: Union[str, List[str]], types: list = TEXT_FORMATS, recursive: bool = True
+):
     """Return a list of all the files in a given directory."""
     if len(types) == 0:
         raise ValueError("types cannot be empty.")
@@ -278,7 +286,7 @@ def is_url(string: str):
 def create_vector_db_from_dir(
     dir_path: str,
     max_tokens: int = 4000,
-    client: API = None,
+    client: ClientAPI = None,
     db_path: str = "/tmp/chromadb.db",
     collection_name: str = "all-my-documents",
     get_or_create: bool = False,
@@ -323,7 +331,11 @@ def create_vector_db_from_dir(
             # https://github.com/nmslib/hnswlib#supported-distances
             # https://github.com/chroma-core/chroma/blob/566bc80f6c8ee29f7d99b6322654f32183c368c4/chromadb/segment/impl/vector/local_hnsw.py#L184
             # https://github.com/nmslib/hnswlib/blob/master/ALGO_PARAMS.md
-            metadata={"hnsw:space": "ip", "hnsw:construction_ef": 30, "hnsw:M": 32},  # ip, l2, cosine
+            metadata={
+                "hnsw:space": "ip",
+                "hnsw:construction_ef": 30,
+                "hnsw:M": 32,
+            },  # ip, l2, cosine
         )
 
         if custom_text_split_function is not None:
@@ -349,7 +361,7 @@ def create_vector_db_from_dir(
 def query_vector_db(
     query_texts: List[str],
     n_results: int = 10,
-    client: API = None,
+    client: ClientAPI = None,
     db_path: str = "/tmp/chromadb.db",
     collection_name: str = "all-my-documents",
     search_string: str = "",
@@ -387,7 +399,9 @@ def query_vector_db(
     # collection. So we compute the embeddings ourselves and pass it to the query function.
     collection = client.get_collection(collection_name)
     embedding_function = (
-        ef.SentenceTransformerEmbeddingFunction(embedding_model) if embedding_function is None else embedding_function
+        ef.SentenceTransformerEmbeddingFunction(embedding_model)
+        if embedding_function is None
+        else embedding_function
     )
     query_embeddings = embedding_function(query_texts)
     # Query/search n most similar results. You can also .get by id
