@@ -2,7 +2,7 @@ from typing import Callable, Dict, Optional, Union
 from autogen import ConversableAgent
 
 
-class Slave(ConversableAgent):
+class Servant(ConversableAgent):
     def __init__(
         self,
         name: Optional[str] = "Slave",

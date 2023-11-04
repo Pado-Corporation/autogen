@@ -1,7 +1,7 @@
 from autogen import config_list_from_dotenv
 from angel import Angel
 from king import King
-from slave import Slave
+from servant import Servant
 
 if __name__ == "__main__":
     config_list_from_dotenv(
