@@ -1,0 +1,22 @@
+{
+    "goal": "Seek funding for the ASQ project",
+    "summary": "The user is developing an AI assistant called ASQ, an end-to-end solution for heavy research tasks. They have modular prototypes but haven't secured any funding or incorporated yet. They're considering incorporating in Seoul or possibly the United States. The team consists of the user, with expertise in Business Development, Sales, and UX design, and a co-founder, who specializes in General AI application stacks and DevOps.",
+    "format": "A detailed funding strategy that includes potential investors, incorporation advice, and pitch preparation",
+    "assistants": [
+        {
+            "name": "Business Strategist",
+            "responsibility": "Develop a comprehensive business strategy, including incorporation advice and potential locations",
+            "bg_knowledge": "The user is considering incorporating in Seoul or the United States"
+        },
+        {
+            "name": "Funding Specialist",
+            "responsibility": "Identify potential investors and develop a funding strategy",
+            "bg_knowledge": "The user has not yet secured any funding for their project"
+        },
+        {
+            "name": "Pitch Coach",
+            "responsibility": "Help the user prepare a compelling pitch for potential investors",
+            "bg_knowledge": "The user's team consists of two members with expertise in Business Development, Sales, UX design, General AI application stacks, and DevOps"
+        }
+    ]
+}

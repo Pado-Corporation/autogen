@@ -7,7 +7,7 @@ class Angel(GroupChatManager):
     def __init__(
         self,
         groupchat: GroupChat,
-        name: str | None = "chat_manager",
+        name: str | None = "Angel",
         max_consecutive_auto_reply: int | None = sys.maxsize,
         human_input_mode: str | None = "NEVER",
         system_message: str | None = "Group chat manager.",

@@ -1,13 +1,13 @@
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from autogen import UserProxyAgent
 
 
 class King(UserProxyAgent):
-    """King manages the Slaves for the human user"""
+    """King agent is the envoy from the Human user that talks to Servants"""
 
     def __init__(
         self,
-        name: Optional[str] = "Prometheus",
+        name: Optional[str] = "King",
         is_termination_msg: Callable[[Dict], bool] | None = None,
         max_consecutive_auto_reply: int | None = None,
         human_input_mode: str | None = "ALWAYS",

@@ -7,19 +7,31 @@ import json
 logger = logging.getLogger()
 
 
-def parse_info(message: str) -> Dict | None:
+def save_requirements(requirements: Dict):
+    if not requirements:
+        return
+    try:
+        with open("requirements.json", "w", encoding="utf-8") as json_file:
+            json.dump(requirements, json_file, ensure_ascii=False, indent=4)
+        return print(f"Requirements have been written to {requirements}")
+    except IOError as e:
+        return print(f"An error occurred while writing JSON to the file: {e}")
+
+
+def parse_requirements(message: str) -> Dict:
     try:
         json_str_start = message.index("{")
         json_str_end = message.rindex("}", 0, message.index("[END]"))
-        message = message[:json_str_start].strip()
-        print(f"ASQ: f{message}")
+
+        concluding_message = message[:json_str_start].strip()
+        print(f"ASQ: {concluding_message}")
 
         json_str = message[json_str_start : json_str_end + 1]
         json_obj: Dict = json.loads(json_str)
         return json_obj
     except ValueError as e:
-        logger.error("Error in extracting or parsing JSON:", e)
-        return None
+        logger.error("Error in extracting or parsing JSON: %s", e)
+        return {}
 
 
 class Oracle(UserProxyAgent):
@@ -36,5 +48,6 @@ class Oracle(UserProxyAgent):
         self, message: Dict | str, sender: Agent, request_reply: bool | None = None, silent: bool | None = False
     ):
         if "[END]" in message:
-            return parse_info(message)
+            requirements = parse_requirements(message)
+            return save_requirements(requirements)
         return super().receive(message, sender, request_reply, silent)

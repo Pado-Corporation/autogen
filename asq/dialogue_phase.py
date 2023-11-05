@@ -22,11 +22,3 @@ if __name__ == "__main__":
     user_request = "What's up?" if user_request == "" else user_request
 
     oracle.initiate_chat(god, message=user_request)
-
-    # oracle.last_message()["content"]
-
-    """
-    TODO)
-    The final result from this phase needs to be a JSON file: generated_assistants.json
-    Then, pipeline this to the next phase: Task Execution
-    """
