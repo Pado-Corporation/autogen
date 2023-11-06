@@ -10,10 +10,10 @@ class King(UserProxyAgent):
         name: Optional[str] = "King",
         is_termination_msg: Callable[[Dict], bool] | None = None,
         max_consecutive_auto_reply: int | None = None,
-        human_input_mode: str | None = "ALWAYS",
+        human_input_mode: str | None = "NEVER",
         function_map: Dict[str, Callable[..., Any]] | None = None,
         code_execution_config: Dict | bool | None = None,
-        default_auto_reply: str | Dict | None = "",
+        default_auto_reply: str | Dict | None = None,
         llm_config: Dict | bool | None = False,
         system_message: str | None = "",
     ):

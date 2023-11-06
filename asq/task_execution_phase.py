@@ -42,13 +42,13 @@ if __name__ == "__main__":
     requirements = read_requirements()
 
     initial_request = f"""This is my goal: {requirements["goal"]}
-    The desired format for my problem: {requirements["format"]}
-    Here are some background knowledge about me: {requirements["summary"]}
+The desired format for my problem: {requirements["format"]}
+Here are some background knowledge about me: {requirements["summary"]}
 """
 
     king = King()
     servants = create_servants(requirements)
-    colosseum = Colosseum(agents=[king, servants], messages=[], max_round=20)
+    colosseum = Colosseum(agents=[king, *servants], messages=[], max_round=20)
 
     angel = Angel(groupchat=colosseum)
 

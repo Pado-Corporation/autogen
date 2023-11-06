@@ -16,7 +16,7 @@ class Agent:
         Args:
             name (str): name of the agent.
         """
-        # a dictionary of conversations, default value is list
+        # The name of the agent
         self._name = name
 
     @property

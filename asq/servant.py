@@ -1,5 +1,15 @@
 from typing import Callable, Dict, Optional, Any
 from autogen import ConversableAgent
+import re
+
+
+def to_snake_case(s):
+    # Turn CamelCase into snake_case
+    s = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", s)
+    # Do the same for capital letters in the middle of a word
+    s = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s)
+    # Replace spaces and convert to lowercase
+    return s.replace(" ", "_").lower()
 
 
 class Servant(ConversableAgent):
@@ -11,7 +21,12 @@ class Servant(ConversableAgent):
         human_input_mode: str | None = "TERMINATE",
         function_map: Dict[str, Callable[..., Any]] | None = None,
         code_execution_config: Dict | bool | None = None,
-        llm_config: Dict | bool | None = None,
+        llm_config: Dict
+        | bool
+        | None = {
+            "temperature": 0,
+            "request_timeout": 600,
+        },
         default_auto_reply: str | Dict | None = "",
         responsibility: str = "",
         bg_knowledge: str = "",
@@ -22,12 +37,12 @@ class Servant(ConversableAgent):
         self.bg_knowledge = bg_knowledge
         self.goal = goal
         self.format = format
-        system_message = f"""You are a {name}.
-        You are responsible for this task: {responsibility}
-        You are serving the user to help achieve a goal: {goal}
-        The best format to solve the problem is: {format}
-        You know some background knowledge about the user: {bg_knowledge}
+        system_message = f"""You are {name}.
+You are responsible for: {responsibility}
+About the user: {bg_knowledge}
 """
+        name = to_snake_case(name)
+
         super().__init__(
             name,
             system_message,
@@ -41,4 +56,4 @@ class Servant(ConversableAgent):
         )
 
     def __repr__(self) -> str:
-        return f"[{self.name}]\nresponsibility: {self.responsibility}\nbg_knowledge: {self.bg_knowledge}"
+        return f"[{self.name}]\n{self.system_message}"

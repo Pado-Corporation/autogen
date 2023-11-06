@@ -13,7 +13,7 @@ def save_requirements(requirements: Dict):
     try:
         with open("requirements.json", "w", encoding="utf-8") as json_file:
             json.dump(requirements, json_file, ensure_ascii=False, indent=4)
-        return print(f"Requirements have been written to {requirements}")
+        return print(f"Requirements have been written to requirements.json")
     except IOError as e:
         return print(f"An error occurred while writing JSON to the file: {e}")
 
