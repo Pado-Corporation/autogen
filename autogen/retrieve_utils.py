@@ -14,6 +14,9 @@ import chromadb.utils.embedding_functions as ef
 import logging
 import pypdf
 from autogen.token_count_utils import count_token
+from langchain.document_loaders import DirectoryLoader
+from langchain.document_loaders import TextLoader, PyPDFLoader, UnstructuredWordDocumentLoader
+from langchain.text_splitter import MarkdownTextSplitter, RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 TEXT_FORMATS = [
@@ -210,10 +213,50 @@ def is_url(string: str):
         return False
 
 
+def pado_loadnsplit(dir_path: str, max_token: int = 4000, chunk_overlap=200):
+    text_loader_kwargs = {"encoding": "utf8"}
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),
+        ("###", "Header 3"),
+    ]
+    markdown_loader = DirectoryLoader(
+        dir_path,
+        glob="*.md",
+        show_progress=True,
+        loader_cls=TextLoader,
+        loader_kwargs=text_loader_kwargs,
+        silent_errors=True,
+    )
+    pdf_loader = DirectoryLoader(
+        dir_path, glob="*.pdf", show_progress=True, loader_cls=PyPDFLoader, silent_errors=True
+    )
+    docs_loader = DirectoryLoader(
+        dir_path,
+        glob="*.docx",
+        show_progress=True,
+        loader_cls=UnstructuredWordDocumentLoader,
+        loader_kwargs=text_loader_kwargs,
+        silent_errors=True,
+    )
+
+    markdown_documents = markdown_loader.load()
+    pdf_documents = pdf_loader.load()
+    docs_documents = docs_loader.load()
+    markdown_splitter = MarkdownTextSplitter(chunk_size=max_token, chunk_overlap=chunk_overlap)
+    markdown_chunks = markdown_splitter.split_documents(markdown_documents)
+    pdf_splitter = RecursiveCharacterTextSplitter(chunk_size=4000, chunk_overlap=200)
+    pdf_chunks = pdf_splitter.split_documents(pdf_documents)
+    docs_splitter = RecursiveCharacterTextSplitter(chunk_size=4000, chunk_overlap=200)
+    docx_chunks = docs_splitter.split_documents(docs_documents)
+    chunks = [*markdown_chunks, *pdf_chunks, *docx_chunks]
+    return chunks
+
+
 def create_vector_db_from_dir(
     dir_path: str,
     max_tokens: int = 4000,
-    client: ClientAPI = None,
+    client: API = None,
     db_path: str = "/tmp/chromadb.db",
     collection_name: str = "all-my-documents",
     get_or_create: bool = False,
@@ -221,7 +264,7 @@ def create_vector_db_from_dir(
     must_break_at_empty_line: bool = True,
     embedding_model: str = "all-MiniLM-L6-v2",
     embedding_function: Callable = None,
-    custom_text_split_function: Callable = None,
+    custom_text_split_function: Union[Callable, str] = "PADO",
 ) -> API:
     """Create a vector db from all the files in a given directory, the directory can also be a single file or a url to
         a single file. We support chromadb compatible APIs to create the vector db, this function is not required if
@@ -268,10 +311,13 @@ def create_vector_db_from_dir(
             },  # ip, l2, cosine
         )
 
-        if custom_text_split_function is not None:
+        if custom_text_split_function is "PADO":
+            chunks = pado_loadnsplit(dir_path)
+        elif custom_text_split_function is not None:
             chunks = split_files_to_chunks(
                 get_files_from_dir(dir_path), custom_text_split_function=custom_text_split_function
             )
+
         else:
             chunks = split_files_to_chunks(
                 get_files_from_dir(dir_path), max_tokens, chunk_mode, must_break_at_empty_line
@@ -280,10 +326,17 @@ def create_vector_db_from_dir(
         # Upsert in batch of 40000 or less if the total number of chunks is less than 40000
         for i in range(0, len(chunks), min(40000, len(chunks))):
             end_idx = i + min(40000, len(chunks) - i)
-            collection.upsert(
-                documents=chunks[i:end_idx],
-                ids=[f"doc_{j}" for j in range(i, end_idx)],  # unique for each doc
-            )
+            if custom_text_split_function is "PADO":
+                collection.upsert(
+                    documents=[chunk.page_content for chunk in chunks[i:end_idx]],
+                    ids=[f"doc_{j}" for j in range(i, end_idx)],
+                    metadatas=[chunk.metadata for chunk in chunks[i:end_idx]],
+                )
+            else:
+                collection.upsert(
+                    documents=chunks[i:end_idx],
+                    ids=[f"doc_{j}" for j in range(i, end_idx)],  # unique for each doc
+                )
     except ValueError as e:
         logger.warning(f"{e}")
     return client
@@ -292,7 +345,7 @@ def create_vector_db_from_dir(
 def query_vector_db(
     query_texts: List[str],
     n_results: int = 10,
-    client: ClientAPI = None,
+    client: API = None,
     db_path: str = "/tmp/chromadb.db",
     collection_name: str = "all-my-documents",
     search_string: str = "",

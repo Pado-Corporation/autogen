@@ -199,6 +199,7 @@ class Completion(openai_Completion):
 
         Try cache first. If not found, call the openai api. If the api call fails, retry after retry_wait_time.
         """
+        logger.debug(f"config : {config}")
         config = config.copy()
         openai.api_key_path = config.pop("api_key_path", openai.api_key_path)
         key = get_key(config)
@@ -230,10 +231,9 @@ class Completion(openai_Completion):
             ):
                 # transient error
                 logger.info(f"retrying in {retry_wait_time} seconds...", exc_info=1)
-                print("Plase tell me something123")
                 sleep(retry_wait_time)
             except APIError as err:
-                print("Plase tellmasdfas")
+                logger.warning("API ERROR OCCURED")
                 error_code = (
                     err
                     and err.json_body
@@ -247,8 +247,7 @@ class Completion(openai_Completion):
                 logger.info(f"retrying in {retry_wait_time} seconds...", exc_info=1)
                 sleep(retry_wait_time)
             except (RateLimitError, Timeout) as err:
-                logger.debug("hdfasdfadf")
-                print("Please tell me something...2")
+                logger.warning("RateLimitError & TimeOUT Error Occur")
                 time_left = max_retry_period - (time.time() - start_time + retry_wait_time)
                 if (
                     time_left > 0
@@ -257,17 +256,14 @@ class Completion(openai_Completion):
                     and isinstance(err, Timeout)
                     and "request_timeout" not in config
                 ):
-                    logger.debug("sadfasdfasf")
                     if isinstance(err, Timeout):
                         request_timeout <<= 1
                     request_timeout = min(request_timeout, time_left)
                     logger.info(f"retrying in {retry_wait_time} seconds...", exc_info=1)
                     sleep(retry_wait_time)
                 elif raise_on_ratelimit_or_timeout:
-                    logger.error("bbbsadfasdfasfbbbb")
                     raise
                 else:
-                    logger.debug("cccccc")
                     response = -1
                     if use_cache and isinstance(err, Timeout):
                         cls._cache.set(key, response)
@@ -276,14 +272,12 @@ class Completion(openai_Completion):
                     )
                     return response
             except InvalidRequestError:
-                print("Please tell me something...3")
                 if "azure" in config.get("api_type", openai.api_type) and "model" in config:
                     # azure api uses "engine" instead of "model"
                     config["engine"] = config.pop("model").replace("gpt-3.5-turbo", "gpt-35-turbo")
                 else:
                     raise
             except Exception as e:
-                print("Prksdfasdf")
                 logger.error(f"Enexpected Error occur: {e}")
                 raise
 
