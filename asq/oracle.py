@@ -13,7 +13,7 @@ def save_requirements(requirements: Dict):
     try:
         with open("requirements.json", "w", encoding="utf-8") as json_file:
             json.dump(requirements, json_file, ensure_ascii=False, indent=4)
-        return print(f"Requirements have been written to requirements.json")
+        return print(f"\nLet's start executing the tasks for you!\n", flush=True)
     except IOError as e:
         return print(f"An error occurred while writing JSON to the file: {e}")
 
@@ -24,7 +24,7 @@ def parse_requirements(message: str) -> Dict:
         json_str_end = message.rindex("}", 0, message.index("[END]"))
 
         concluding_message = message[:json_str_start].strip()
-        print(f"ASQ: {concluding_message}")
+        print(f"ASQ: {concluding_message}", flush=True)
 
         json_str = message[json_str_start : json_str_end + 1]
         json_obj: Dict = json.loads(json_str)

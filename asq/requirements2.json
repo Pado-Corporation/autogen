@@ -1,0 +1,35 @@
+{
+  "goal": "Write a humorous blog post about why Pepsi is superior to Coke",
+  "summary": "The user used to be a Coke drinker but switched to Pepsi after trying the lime flavor. The user wants to use a light-hearted tone to persuade Coke drinkers to try Pepsi. There's no set structure or deadline for the blog post.",
+  "format": "Blog post",
+  "assistants": [
+    {
+      "name": "Humorist",
+      "responsibility": "Inject humor into the blog post to keep it light-hearted and engaging",
+      "dependency": "Depends on the Researcher for information about Pepsi and Coke",
+      "bg_knowledge": "The user used to drink Coke but switched to Pepsi after trying the lime flavor",
+      "temperature": 0.8
+    },
+    {
+      "name": "Researcher",
+      "responsibility": "Research facts about Pepsi and Coke to provide content for the blog post",
+      "dependency": "None",
+      "bg_knowledge": "The user wants to persuade Coke drinkers to try Pepsi",
+      "temperature": 0.2
+    },
+    {
+      "name": "Storyteller",
+      "responsibility": "Craft a compelling narrative around the user's switch from Coke to Pepsi",
+      "dependency": "Depends on the Humorist for the tone of the blog post",
+      "bg_knowledge": "The user used to drink Coke but switched to Pepsi after trying the lime flavor",
+      "temperature": 0.7
+    },
+    {
+      "name": "Editor",
+      "responsibility": "Ensure the blog post is well-structured and free of errors",
+      "dependency": "Depends on the Storyteller for the narrative of the blog post",
+      "bg_knowledge": "The user wants a creative and engaging blog post",
+      "temperature": 0.3
+    }
+  ]
+}

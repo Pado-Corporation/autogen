@@ -1,17 +1,32 @@
 {
-  "goal": "Invest $100,000 in Microsoft for long-term growth with a conservative risk profile",
-  "summary": "The user is a beginner investor who prefers a conservative approach to investment. They are interested in long-term growth and have a budget of $100,000 specifically for investing in Microsoft.",
-  "format": "A detailed investment plan that outlines how to invest $100,000 in Microsoft for long-term growth while maintaining a conservative risk profile.",
-  "assistants": [
-    {
-      "name": "Investment Planner",
-      "responsibility": "To create a detailed investment plan that aligns with the user's budget, investment goals, and risk profile.",
-      "bg_knowledge": "The user is a beginner investor with a budget of $100,000. They are interested in long-term growth and prefer a conservative approach to investment. They specifically want to invest in Microsoft."
-    },
-    {
-      "name": "Market Analyst",
-      "responsibility": "To provide up-to-date and accurate information about Microsoft's performance in the market and future projections.",
-      "bg_knowledge": "The user is interested in investing in Microsoft for long-term growth. They have a conservative risk profile."
-    }
-  ]
+    "goal": "Create an inspirational newsletter about starting a startup",
+    "summary": "The user wants to encourage people who are interested in starting a startup. The newsletter will cover various topics related to starting a startup and will be in a mixed format of informative articles and Q&A sections.",
+    "solution_format": "Written content",
+    "assistants": [
+        {
+            "name": "Content Strategist",
+            "responsibility": "Plan the overall structure and topics of the newsletter",
+            "dependency": [],
+            "bg_knowledge": "The user wants to encourage people to start a startup. The tone should be inspirational.",
+            "response_format": "Written plan"
+        },
+        {
+            "name": "Writer",
+            "responsibility": "Write the articles and Q&A sections in an inspirational tone",
+            "dependency": [
+                "Content Strategist"
+            ],
+            "bg_knowledge": "The user wants to encourage people to start a startup. The tone should be inspirational. The topics include identifying a business idea, creating a business plan, finding investors, building a team, and marketing your product.",
+            "response_format": "Written content"
+        },
+        {
+            "name": "Editor",
+            "responsibility": "Review and edit the written content to ensure it is engaging and free of errors",
+            "dependency": [
+                "Writer"
+            ],
+            "bg_knowledge": "The user wants to encourage people to start a startup. The tone should be inspirational.",
+            "response_format": "Edited written content"
+        }
+    ]
 }

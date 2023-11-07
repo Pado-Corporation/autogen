@@ -9,12 +9,17 @@ class King(UserProxyAgent):
         self,
         name: Optional[str] = "King",
         is_termination_msg: Callable[[Dict], bool] | None = None,
-        max_consecutive_auto_reply: int | None = None,
+        max_consecutive_auto_reply: int | None = 3,
         human_input_mode: str | None = "NEVER",
         function_map: Dict[str, Callable[..., Any]] | None = None,
         code_execution_config: Dict | bool | None = None,
         default_auto_reply: str | Dict | None = None,
-        llm_config: Dict | bool | None = False,
+        llm_config: Dict
+        | bool
+        | None = {
+            "temperature": 0,
+            "request_timeout": 120,
+        },
         system_message: str | None = "",
     ):
         super().__init__(
