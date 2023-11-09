@@ -17,8 +17,8 @@ class Config(metaclass=SingletonMeta):
             env_path = find_dotenv()
             load_dotenv(env_path)
 
-            self.log_level = os.getenv("LOG_LEVEL")
-            self.openai_api_key = os.getenv("OPENAI_API_KEY")
-            self.bing_search_api_key = os.getenv("BING_SEARCH_V7_SUBSCRIPTION_KEY")
-            self.bing_search_endpoint = os.getenv("BING_SEARCH_V7_ENDPOINT")
+            self.log_level: str = os.getenv("LOG_LEVEL")
+            self.openai_api_key: str = os.getenv("OPENAI_API_KEY")
+            self.bing_search_api_key: str = os.getenv("BING_SEARCH_V7_SUBSCRIPTION_KEY")
+            self.bing_search_endpoint: str = os.getenv("BING_SEARCH_V7_ENDPOINT")
             self.initialized = True

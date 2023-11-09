@@ -1,8 +1,8 @@
-from typing import Callable, Dict
-from .employee import Employee
+from typing import Callable, Dict, Optional, Union
+from autogen import AssistantAgent
 
 
-class EquityResearcher(Employee):
+class Employee(AssistantAgent):
     def __init__(
         self,
         name: str,
