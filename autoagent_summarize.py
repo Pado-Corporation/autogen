@@ -34,6 +34,7 @@ always try to use function.
 
 dialog_summarizer_prompt_template = """
 You'll be responsebile for a specifc part of the report
+make it ADA form using reference.
 The report is designed to help users achieve their {goal} in the context of the user's {goal}. 
 Your main role is read dialog between user(question) and assistant(answer), and summarize them and make them into a few paragraphs.
 The part you will be responsible for is the {toc_part} of the report. If you finish summarize, end answer with "TERMINATE(SUMMARIZE)" after that just answer me only with "TERMINATE(SUMMARIZE)"
@@ -144,9 +145,11 @@ def ask_DB(message, is_sufficient: str):
     # return the last message the expert received
     last_message = assistant.last_message()["content"]
     if last_message.strip() == "TERMINATE(QA)":
-        return assistant.get_messages()[-3]["content"]
+        summary = assistant.get_messages()[-3]["content"]
+        return summary.replace("TERMINATE(QA)", "")
     else:
-        return last_message
+        summary = last_message
+        return last_message.replace("TERMINATE(QA)", "")
 
 
 def ask_Summary(name):
@@ -156,14 +159,24 @@ def ask_Summary(name):
         llm_config=llm_config,
     )
 
-    chat_log = toc_manager.chat_messages
-    user_proxy.initiate_chat(toc_summarizer, message=chat_log)
+    chat_logs = toc_manager.chat_messages[user_proxy]
+
+    raw_datas = ""
+    for i, chat_log in enumerate(chat_logs):
+        print(chat_log["content"])
+        try:
+            if len(chat_log["content"]) > 10:
+                raw_datas += f"\n Data {i} : \n" + chat_log["content"]
+        except:
+            continue
+    print(raw_datas)
+    user_proxy.initiate_chat(toc_summarizer, message=raw_datas)
     last_message = toc_summarizer.last_message()["content"]
     if last_message == "TERMINATE(SUMMARIZE)":
-        summary = toc_summarizer.get_messages()[-3]["content"].replace("TERMINATE", "")
+        summary = toc_summarizer.get_messages()[-3]["content"]
         return summary
     else:
-        summary = last_message.replace("TERMINATE", "")
+        summary = last_message
         return summary
 
 
@@ -180,11 +193,12 @@ toc_manager = AssistantAgent(
 user_proxy = UserProxyAgent(
     name="tester",
     llm_config=False,
-    is_termination_msg=lambda x: isinstance(x, dict)
-    and "TERMINATE(ASK)" in str(x.get("content", ""))[-20:].upper(),
     human_input_mode="NEVER",
+    is_termination_msg=lambda x: isinstance(x, dict)
+    and "TERMINATE(SUMMARIZE)" in str(x.get("content", ""))[-20:].upper(),
     code_execution_config=False,
     function_map={"ask_DB": ask_DB, "ask_Summary": ask_Summary},
 )
 
 user_proxy.initiate_chat(toc_manager, silent=False, message="use function")
+toc_manager.last_message(agent=user_proxy)

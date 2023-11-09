@@ -60,7 +60,7 @@ PROMPT_QA = """You're a retrieve augmented chatbot. You answer user's questions 
 context provided by the user. Always Include where you reference.
 If you can't answer the question with or without the current context, you should reply exactly `UPDATE CONTEXT`.
 You must include which reference you used in APA form.
-After Finish to answer end answer with "TERMINATE(QA)", reply with "TERMINATE(QA)"
+When you have sufficient information, append "TERMINATE(QA)" to the end of your answer, and answer any further questions with "TERMINATE(QA)".
 
 User's question is: {input_question}
 
@@ -130,6 +130,7 @@ class RetrieveUserProxyAgent(UserProxyAgent):
                     Default is autogen.token_count_utils.count_token that uses tiktoken, which may not be accurate for non-OpenAI models.
                 - custom_text_split_function(Optional, Callable): a custom function to split a string into a list of strings.
                     Default is None, will use the default function in `autogen.retrieve_utils.split_text_to_chunks`.
+                - n_includechunk(Optional, int) : Setup how many document will be included in the one RAG QA call
             **kwargs (dict): other kwargs in [UserProxyAgent](../user_proxy_agent#__init__).
 
         Example of overriding retrieve_docs:
@@ -163,7 +164,6 @@ class RetrieveUserProxyAgent(UserProxyAgent):
             human_input_mode=human_input_mode,
             **kwargs,
         )
-
         self._retrieve_config = {} if retrieve_config is None else retrieve_config
         self._task = self._retrieve_config.get("task", "default")
         self._client = self._retrieve_config.get("client", chromadb.Client())
@@ -171,34 +171,24 @@ class RetrieveUserProxyAgent(UserProxyAgent):
         self._collection_name = self._retrieve_config.get("collection_name", "autogen-docs")
         self._model = self._retrieve_config.get("model", "gpt-4")
         self._max_tokens = self.get_max_tokens(self._model)
-        self._chunk_token_size = int(
-            self._retrieve_config.get("chunk_token_size", self._max_tokens * 0.4)
-        )
+        self._chunk_token_size = int(self._retrieve_config.get("chunk_token_size", self._max_tokens * 0.4))
         self._chunk_mode = self._retrieve_config.get("chunk_mode", "multi_lines")
         self._must_break_at_empty_line = self._retrieve_config.get("must_break_at_empty_line", True)
         self._embedding_model = self._retrieve_config.get("embedding_model", "all-MiniLM-L6-v2")
         self._embedding_function = self._retrieve_config.get("embedding_function", None)
         self.customized_prompt = self._retrieve_config.get("customized_prompt", None)
-        self.customized_answer_prefix = self._retrieve_config.get(
-            "customized_answer_prefix", ""
-        ).upper()
+        self.customized_answer_prefix = self._retrieve_config.get("customized_answer_prefix", "").upper()
         self.update_context = self._retrieve_config.get("update_context", True)
         self._get_or_create = (
-            self._retrieve_config.get("get_or_create", False)
-            if self._docs_path is not None
-            else False
+            self._retrieve_config.get("get_or_create", False) if self._docs_path is not None else False
         )
-        self.custom_token_count_function = self._retrieve_config.get(
-            "custom_token_count_function", count_token
-        )
-        self.custom_text_split_function = self._retrieve_config.get(
-            "custom_text_split_function", "PADO"
-        )
-        self._context_max_tokens = self._max_tokens * 0.8
-        self._collection = (
-            True if self._docs_path is None else False
-        )  # whether the collection is created
+        self.custom_token_count_function = self._retrieve_config.get("custom_token_count_function", count_token)
+        self.custom_text_split_function = self._retrieve_config.get("custom_text_split_function", "PADO")
+        self._context_max_tokens = self._max_tokens * 0.4
+        self._collection = True if self._docs_path is None else False  # whether the collection is created
         self._ipython = get_ipython()
+        self._n_includechunk = self._retrieve_config.get("n_includechunk", 2)
+
         self._doc_idx = -1  # the index of the current used doc
         self._results = {}  # the results of the current query
         self._intermediate_answers = set()  # the intermediate answers
@@ -206,9 +196,7 @@ class RetrieveUserProxyAgent(UserProxyAgent):
         self._doc_ids = []  # the ids of the current used doc
         # update the termination message function
         self._is_termination_msg = (
-            self._is_termination_msg_retrievechat
-            if is_termination_msg is None
-            else is_termination_msg
+            self._is_termination_msg_retrievechat if is_termination_msg is None else is_termination_msg
         )
         self.register_reply(Agent, RetrieveUserProxyAgent._generate_retrieve_user_reply, position=1)
 
@@ -233,14 +221,20 @@ class RetrieveUserProxyAgent(UserProxyAgent):
 
     @staticmethod
     def get_max_tokens(model="gpt-3.5-turbo"):
-        if "32k" in model:
-            return 32000
-        elif "16k" in model:
-            return 16000
-        elif "gpt-4" in model:
-            return 8000
-        else:
-            return 4000
+        model_token_mapping = {
+            "gpt-4-1106-preview": 128000,
+            "gpt-4-vision-preview": 4096,
+            "gpt-4": 8192,
+            "gpt-4-32k": 32768,
+            "gpt-4-0613": 8192,
+            "gpt-4-32k-0613": 32768,
+            "gpt-4-0314": 8192,
+            "gpt-4-32k-0314": 32768,
+            "gpt-3.5-turbo-1106": 4096,
+            "gpt-3.5-turbo": 4096,  # 이 값은 2023년 12월 11일부터 적용됩니다.
+            "gpt-3.5-turbo-16k": 16385,
+        }
+        return model_token_mapping.get(model, 4000)
 
     def _reset(self, intermediate=False):
         self._doc_idx = -1  # the index of the current used doc
@@ -262,13 +256,15 @@ class RetrieveUserProxyAgent(UserProxyAgent):
                 continue
             _doc_tokens = self.custom_token_count_function(doc, self._model)
             if _doc_tokens > self._context_max_tokens:
-                func_print = (
-                    f"Skip doc_id {results['ids'][0][idx]} as it is too long to fit in the context."
-                )
+                func_print = f"Skip doc_id {results['ids'][0][idx]} as it is too long to fit in the context."
                 print(colored(func_print, "green"), flush=True)
                 self._doc_idx = idx
                 continue
             if current_tokens + _doc_tokens > self._context_max_tokens:
+                break
+            if _tmp_retrieve_count >= self._n_includechunk:
+                func_print = f"Succesfully update {self._n_includechunk} context information, if you want to change it change setup(pado)"
+                print(colored(func_print, "green"), flush=True)
                 break
             func_print = f"Adding doc_id {results['ids'][0][idx]} to context."
             print(colored(func_print, "green"), flush=True)
@@ -276,9 +272,9 @@ class RetrieveUserProxyAgent(UserProxyAgent):
             doc_metadata = results["metadatas"][0][idx]
             str_docmedata = "Source Information : "
             str_docmedata += str(doc_metadata)
-            doc_contents += f"\nReference Data {idx} : \n"
-            doc_contents += doc + "\n"
             doc_contents += str_docmedata + "\n"
+
+            doc_contents += doc + "\n"
             self._doc_idx = idx
             self._doc_ids.append(results["ids"][0][idx])
             self._doc_contents.append(doc)
@@ -292,9 +288,7 @@ class RetrieveUserProxyAgent(UserProxyAgent):
             print(colored("No more context, will terminate.", "green"), flush=True)
             return "TERMINATE"
         if self.customized_prompt:
-            message = self.customized_prompt.format(
-                input_question=self.problem, input_context=doc_contents
-            )
+            message = self.customized_prompt.format(input_question=self.problem, input_context=doc_contents)
         elif task.upper() == "CODE":
             message = PROMPT_CODE.format(input_question=self.problem, input_context=doc_contents)
         elif task.upper() == "QA":
@@ -308,12 +302,8 @@ class RetrieveUserProxyAgent(UserProxyAgent):
     def _check_update_context(self, message):
         if isinstance(message, dict):
             message = message.get("content", "")
-        update_context_case1 = (
-            "UPDATE CONTEXT" in message[-20:].upper() or "UPDATE CONTEXT" in message[:20].upper()
-        )
-        update_context_case2 = (
-            self.customized_answer_prefix and self.customized_answer_prefix not in message.upper()
-        )
+        update_context_case1 = "UPDATE CONTEXT" in message[-20:].upper() or "UPDATE CONTEXT" in message[:20].upper()
+        update_context_case2 = self.customized_answer_prefix and self.customized_answer_prefix not in message.upper()
         return update_context_case1, update_context_case2
 
     def _generate_retrieve_user_reply(
@@ -350,9 +340,7 @@ class RetrieveUserProxyAgent(UserProxyAgent):
                 if not doc_contents:
                     for _tmp_retrieve_count in range(1, 5):
                         self._reset(intermediate=True)
-                        self.retrieve_docs(
-                            self.problem, self.n_results * (2 * _tmp_retrieve_count + 1)
-                        )
+                        self.retrieve_docs(self.problem, self.n_results * (2 * _tmp_retrieve_count + 1))
                         doc_contents = self._get_context(self._results)
                         if doc_contents:
                             break
@@ -361,16 +349,11 @@ class RetrieveUserProxyAgent(UserProxyAgent):
                 # docs in the retrieved doc results to the context.
                 for _tmp_retrieve_count in range(5):
                     self._reset(intermediate=True)
-                    self.retrieve_docs(
-                        _intermediate_info[0], self.n_results * (2 * _tmp_retrieve_count + 1)
-                    )
+                    self.retrieve_docs(_intermediate_info[0], self.n_results * (2 * _tmp_retrieve_count + 1))
                     self._get_context(self._results)
-                    doc_contents = "\n".join(
-                        self._doc_contents
-                    )  # + "\n" + "\n".join(self._intermediate_answers)
+                    doc_contents = "\n".join(self._doc_contents)  # + "\n" + "\n".join(self._intermediate_answers)
                     if doc_contents:
                         break
-            doc_contents += "If you think answer is enough then only reply with TERMINATE"
             self.clear_history()
             sender.clear_history()
             return True, self._generate_message(doc_contents, task=self._task)
@@ -420,8 +403,8 @@ class RetrieveUserProxyAgent(UserProxyAgent):
             embedding_model=self._embedding_model,
             embedding_function=self._embedding_function,
         )
+
         self._results = results
-        print("doc_ids: ", results["ids"])
 
     def generate_init_message(self, problem: str, n_results: int = 20, search_string: str = ""):
         """Generate an initial message with the given problem and prompt.

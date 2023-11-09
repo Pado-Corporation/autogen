@@ -15,7 +15,7 @@ import logging
 import pypdf
 from autogen.token_count_utils import count_token
 from langchain.document_loaders import DirectoryLoader
-from langchain.document_loaders import TextLoader, PyPDFLoader, UnstructuredWordDocumentLoader
+from langchain.document_loaders import TextLoader, PyPDFium2Loader, UnstructuredWordDocumentLoader
 from langchain.text_splitter import MarkdownTextSplitter, RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
@@ -78,18 +78,14 @@ def split_text_to_chunks(
                 lines[0] = lines[0][split_len:]
                 lines_tokens[0] = count_token(lines[0])
             else:
-                logger.warning(
-                    "Failed to split docs with must_break_at_empty_line being True, set to False."
-                )
+                logger.warning("Failed to split docs with must_break_at_empty_line being True, set to False.")
                 must_break_at_empty_line = False
         chunks.append(prev) if len(prev) > 10 else None  # don't add chunks less than 10 characters
         lines = lines[cnt:]
         lines_tokens = lines_tokens[cnt:]
         sum_tokens = sum(lines_tokens)
     text_to_chunk = "\n".join(lines)
-    chunks.append(text_to_chunk) if len(
-        text_to_chunk
-    ) > 10 else None  # don't add chunks less than 10 characters
+    chunks.append(text_to_chunk) if len(text_to_chunk) > 10 else None  # don't add chunks less than 10 characters
     return chunks
 
 
@@ -148,9 +144,7 @@ def split_files_to_chunks(
     return chunks
 
 
-def get_files_from_dir(
-    dir_path: Union[str, List[str]], types: list = TEXT_FORMATS, recursive: bool = True
-):
+def get_files_from_dir(dir_path: Union[str, List[str]], types: list = TEXT_FORMATS, recursive: bool = True):
     """Return a list of all the files in a given directory."""
     if len(types) == 0:
         raise ValueError("types cannot be empty.")
@@ -213,13 +207,8 @@ def is_url(string: str):
         return False
 
 
-def pado_loadnsplit(dir_path: str, max_token: int = 4000, chunk_overlap=200):
+def split_files_to_chunks_pado(dir_path: str, max_token: int = 4000, chunk_overlap=200):
     text_loader_kwargs = {"encoding": "utf8"}
-    headers_to_split_on = [
-        ("#", "Header 1"),
-        ("##", "Header 2"),
-        ("###", "Header 3"),
-    ]
     markdown_loader = DirectoryLoader(
         dir_path,
         glob="*.md",
@@ -229,7 +218,7 @@ def pado_loadnsplit(dir_path: str, max_token: int = 4000, chunk_overlap=200):
         silent_errors=True,
     )
     pdf_loader = DirectoryLoader(
-        dir_path, glob="*.pdf", show_progress=True, loader_cls=PyPDFLoader, silent_errors=True
+        dir_path, glob="*.pdf", show_progress=True, loader_cls=PyPDFium2Loader, silent_errors=True
     )
     docs_loader = DirectoryLoader(
         dir_path,
@@ -245,11 +234,10 @@ def pado_loadnsplit(dir_path: str, max_token: int = 4000, chunk_overlap=200):
     docs_documents = docs_loader.load()
     markdown_splitter = MarkdownTextSplitter(chunk_size=max_token, chunk_overlap=chunk_overlap)
     markdown_chunks = markdown_splitter.split_documents(markdown_documents)
-    pdf_splitter = RecursiveCharacterTextSplitter(chunk_size=4000, chunk_overlap=200)
-    pdf_chunks = pdf_splitter.split_documents(pdf_documents)
-    docs_splitter = RecursiveCharacterTextSplitter(chunk_size=4000, chunk_overlap=200)
+    docs_splitter = RecursiveCharacterTextSplitter(chunk_size=max_token, chunk_overlap=chunk_overlap)
     docx_chunks = docs_splitter.split_documents(docs_documents)
-    chunks = [*markdown_chunks, *pdf_chunks, *docx_chunks]
+    chunks = [*markdown_chunks, *pdf_documents, *docx_chunks]
+    logger.info("Only DOCX, PDF, TXT, MD file supported.")
     return chunks
 
 
@@ -312,7 +300,7 @@ def create_vector_db_from_dir(
         )
 
         if custom_text_split_function is "PADO":
-            chunks = pado_loadnsplit(dir_path)
+            chunks = split_files_to_chunks_pado(dir_path, max_token=max_tokens, chunk_overlap=400)
         elif custom_text_split_function is not None:
             chunks = split_files_to_chunks(
                 get_files_from_dir(dir_path), custom_text_split_function=custom_text_split_function
@@ -324,19 +312,14 @@ def create_vector_db_from_dir(
             )
         logger.info(f"Found {len(chunks)} chunks.")
         # Upsert in batch of 40000 or less if the total number of chunks is less than 40000
-        for i in range(0, len(chunks), min(40000, len(chunks))):
-            end_idx = i + min(40000, len(chunks) - i)
-            if custom_text_split_function is "PADO":
-                collection.upsert(
-                    documents=[chunk.page_content for chunk in chunks[i:end_idx]],
-                    ids=[f"doc_{j}" for j in range(i, end_idx)],
-                    metadatas=[chunk.metadata for chunk in chunks[i:end_idx]],
-                )
-            else:
-                collection.upsert(
-                    documents=chunks[i:end_idx],
-                    ids=[f"doc_{j}" for j in range(i, end_idx)],  # unique for each doc
-                )
+        for i in range(0, len(chunks), 500):
+            logger.info("Request OpenAI embedding batch")
+            end_idx = i + min(500, len(chunks) - i)
+            collection.upsert(
+                documents=[chunk.page_content for chunk in chunks[i:end_idx]],
+                ids=[f"doc_{j}" for j in range(i, end_idx)],
+                metadatas=[chunk.metadata for chunk in chunks[i:end_idx]],
+            )
     except ValueError as e:
         logger.warning(f"{e}")
     return client
@@ -383,9 +366,7 @@ def query_vector_db(
     # collection. So we compute the embeddings ourselves and pass it to the query function.
     collection = client.get_collection(collection_name)
     embedding_function = (
-        ef.SentenceTransformerEmbeddingFunction(embedding_model)
-        if embedding_function is None
-        else embedding_function
+        ef.SentenceTransformerEmbeddingFunction(embedding_model) if embedding_function is None else embedding_function
     )
     query_embeddings = embedding_function(query_texts)
     # Query/search n most similar results. You can also .get by id

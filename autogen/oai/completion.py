@@ -45,11 +45,13 @@ class Completion(openai_Completion):
 
     # set of models that support chat completion
     chat_models = {
+        "gpt-4-1106-preview",
         "gpt-3.5-turbo",
         "gpt-3.5-turbo-0301",  # deprecate in Sep
         "gpt-3.5-turbo-0613",
         "gpt-3.5-turbo-16k",
         "gpt-3.5-turbo-16k-0613",
+        "gpt-3.5-turbo-1106",
         "gpt-35-turbo",
         "gpt-35-turbo-16k",
         "gpt-4",
@@ -84,6 +86,8 @@ class Completion(openai_Completion):
         "gpt-4-32k-0314": (0.06, 0.12),  # deprecate in Sep
         "gpt-4-0613": (0.03, 0.06),
         "gpt-4-32k-0613": (0.06, 0.12),
+        "gpt-4-1106-preview": (0.01, 0.03),
+        "gpt-3.5-turbo-1106": (0.0010, 0.0020),
     }
 
     default_search_space = {
@@ -171,9 +175,7 @@ class Completion(openai_Completion):
                     value = cls._history_dict.pop(existing_key, value)
                 key = get_key(messages + [choice["message"] for choice in response["choices"]])
             else:
-                key = get_key(
-                    [config["prompt"]] + [choice.get("text") for choice in response["choices"]]
-                )
+                key = get_key([config["prompt"]] + [choice.get("text") for choice in response["choices"]])
             value["created_at"].append(cls._count_create)
             value["cost"].append(response["cost"])
             value["token_count"].append(
@@ -234,12 +236,7 @@ class Completion(openai_Completion):
                 sleep(retry_wait_time)
             except APIError as err:
                 logger.warning("API ERROR OCCURED")
-                error_code = (
-                    err
-                    and err.json_body
-                    and isinstance(err.json_body, dict)
-                    and err.json_body.get("error")
-                )
+                error_code = err and err.json_body and isinstance(err.json_body, dict) and err.json_body.get("error")
                 error_code = error_code and error_code.get("code")
                 if error_code == "content_filter":
                     raise
@@ -292,11 +289,7 @@ class Completion(openai_Completion):
         # find the max value in max_valid_n_per_max_tokens
         # whose key is equal or larger than max_tokens
         return max(
-            (
-                value
-                for k, value in cls._max_valid_n_per_max_tokens.get(key, {}).items()
-                if k >= max_tokens
-            ),
+            (value for k, value in cls._max_valid_n_per_max_tokens.get(key, {}).items() if k >= max_tokens),
             default=1,
         )
 
@@ -305,11 +298,7 @@ class Completion(openai_Completion):
         # find the min value in min_invalid_n_per_max_tokens
         # whose key is equal or smaller than max_tokens
         return min(
-            (
-                value
-                for k, value in cls._min_invalid_n_per_max_tokens.get(key, {}).items()
-                if k <= max_tokens
-            ),
+            (value for k, value in cls._min_invalid_n_per_max_tokens.get(key, {}).items() if k <= max_tokens),
             default=None,
         )
 
@@ -327,9 +316,9 @@ class Completion(openai_Completion):
     def _update_invalid_n(cls, prune, region_key, max_tokens, num_completions):
         if prune:
             # update invalid n and prune this config
-            cls._min_invalid_n_per_max_tokens[
-                region_key
-            ] = invalid_n = cls._min_invalid_n_per_max_tokens.get(region_key, {})
+            cls._min_invalid_n_per_max_tokens[region_key] = invalid_n = cls._min_invalid_n_per_max_tokens.get(
+                region_key, {}
+            )
             invalid_n[max_tokens] = min(num_completions, invalid_n.get(max_tokens, np.inf))
 
     @classmethod
@@ -393,9 +382,7 @@ class Completion(openai_Completion):
             region_key = cls._get_region_key(config)
             max_valid_n = cls._get_max_valid_n(region_key, max_tokens)
             if cls.avg_input_tokens:
-                target_output_tokens = (
-                    inference_budget * 1000 - cls.avg_input_tokens * price_input
-                ) / price_output
+                target_output_tokens = (inference_budget * 1000 - cls.avg_input_tokens * price_input) / price_output
                 # max_tokens bounds the maximum tokens
                 # so using it we can calculate a valid n according to the avg # input tokens
                 max_valid_n = max(
@@ -446,11 +433,7 @@ class Completion(openai_Completion):
                     query_cost = response["cost"]
                     cls._total_cost += query_cost
                     cost += query_cost
-                    if (
-                        cls.optimization_budget
-                        and cls._total_cost >= cls.optimization_budget
-                        and not eval_only
-                    ):
+                    if cls.optimization_budget and cls._total_cost >= cls.optimization_budget and not eval_only:
                         # limit the total tuning cost
                         return {
                             metric: 0,
@@ -473,11 +456,7 @@ class Completion(openai_Completion):
                 )
                 # Hoeffding-Serfling bound
                 ratio = 0.1 * np.sqrt(rho / data_limit)
-                if (
-                    target_output_tokens
-                    and avg_n_tokens > target_output_tokens * (1 + ratio)
-                    and not eval_only
-                ):
+                if target_output_tokens and avg_n_tokens > target_output_tokens * (1 + ratio) and not eval_only:
                     cls._update_invalid_n(prune, region_key, max_tokens, num_completions)
                     result[metric] = 0
                     result["total_cost"] = cls._total_cost
@@ -487,16 +466,12 @@ class Completion(openai_Completion):
                     prune
                     and target_output_tokens
                     and avg_n_tokens <= target_output_tokens * (1 - ratio)
-                    and (
-                        num_completions < config_n
-                        or num_completions == config_n
-                        and data_limit == data_length
-                    )
+                    and (num_completions < config_n or num_completions == config_n and data_limit == data_length)
                 ):
                     # update valid n
-                    cls._max_valid_n_per_max_tokens[
-                        region_key
-                    ] = valid_n = cls._max_valid_n_per_max_tokens.get(region_key, {})
+                    cls._max_valid_n_per_max_tokens[region_key] = valid_n = cls._max_valid_n_per_max_tokens.get(
+                        region_key, {}
+                    )
                     valid_n[max_tokens] = max(num_completions, valid_n.get(max_tokens, 0))
                     if num_completions < config_n:
                         # valid already, skip the rest of the data
@@ -531,9 +506,7 @@ class Completion(openai_Completion):
                         target_output_tokens = (
                             inference_budget * 1000 - cls.avg_input_tokens * price_input
                         ) / price_output
-                result["inference_cost"] = (
-                    avg_n_tokens * price_output + cls.avg_input_tokens * price_input
-                ) / 1000
+                result["inference_cost"] = (avg_n_tokens * price_output + cls.avg_input_tokens * price_input) / 1000
                 break
             else:
                 if data_early_stop:
@@ -636,9 +609,7 @@ class Completion(openai_Completion):
         cls._prompts = space.get("prompt")
         if cls._prompts is None:
             cls._messages = space.get("messages")
-            if not all(
-                (isinstance(cls._messages, list), isinstance(cls._messages[0], (dict, list)))
-            ):
+            if not all((isinstance(cls._messages, list), isinstance(cls._messages[0], (dict, list)))):
                 error_msg = "messages must be a list of dicts or a list of lists."
                 logger.error(error_msg)
                 raise AssertionError(error_msg)
@@ -660,9 +631,7 @@ class Completion(openai_Completion):
         cls._stops = space.get("stop")
         if cls._stops:
             if not isinstance(cls._stops, (str, list)):
-                error_msg = (
-                    "stop must be a string, a list of strings, or a list of lists of strings."
-                )
+                error_msg = "stop must be a string, a list of strings, or a list of lists of strings."
                 logger.error(error_msg)
                 raise AssertionError(error_msg)
             if not (isinstance(cls._stops, list) and isinstance(cls._stops[0], list)):
@@ -864,9 +833,7 @@ class Completion(openai_Completion):
                     logger.debug(f"failed with config {i}", exc_info=1)
                     if i == last:
                         raise
-        params = cls._construct_params(
-            context, config, allow_format_str_template=allow_format_str_template
-        )
+        params = cls._construct_params(context, config, allow_format_str_template=allow_format_str_template)
         if not use_cache:
             return cls._get_response(
                 params, raise_on_ratelimit_or_timeout=raise_on_ratelimit_or_timeout, use_cache=False
@@ -876,9 +843,7 @@ class Completion(openai_Completion):
             cls.set_cache(params.pop("seed"))
         with diskcache.Cache(cls.cache_path) as cls._cache:
             cls.set_cache(seed)
-            return cls._get_response(
-                params, raise_on_ratelimit_or_timeout=raise_on_ratelimit_or_timeout
-            )
+            return cls._get_response(params, raise_on_ratelimit_or_timeout=raise_on_ratelimit_or_timeout)
 
     @classmethod
     def instantiate(
@@ -894,9 +859,7 @@ class Completion(openai_Completion):
         return template(context)
 
     @classmethod
-    def _construct_params(
-        cls, context, config, prompt=None, messages=None, allow_format_str_template=False
-    ):
+    def _construct_params(cls, context, config, prompt=None, messages=None, allow_format_str_template=False):
         params = config.copy()
         model = config["model"]
         prompt = config.get("prompt") if prompt is None else prompt
@@ -911,9 +874,7 @@ class Completion(openai_Completion):
                 [
                     {
                         **m,
-                        "content": cls.instantiate(
-                            m["content"], context, allow_format_str_template
-                        ),
+                        "content": cls.instantiate(m["content"], context, allow_format_str_template),
                     }
                     if m.get("content")
                     else m
@@ -1122,9 +1083,7 @@ class Completion(openai_Completion):
         if "text" in choices[0]:
             return [choice["text"] for choice in choices]
         return [
-            choice["message"]
-            if "function_call" in choice["message"]
-            else choice["message"].get("content", "")
+            choice["message"] if "function_call" in choice["message"] else choice["message"].get("content", "")
             for choice in choices
         ]
 
@@ -1140,9 +1099,7 @@ class Completion(openai_Completion):
         if cls._history_dict is None:
             print("No usage summary available.", flush=True)
 
-        token_count_summary = defaultdict(
-            lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        )
+        token_count_summary = defaultdict(lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
 
         if not cls._history_compact:
             source = cls._history_dict.values()
@@ -1152,9 +1109,7 @@ class Completion(openai_Completion):
             # total_cost = sum(cls._history_dict['cost'])
             total_cost = sum(sum(value_list["cost"]) for value_list in cls._history_dict.values())
             source = (
-                token_data
-                for value_list in cls._history_dict.values()
-                for token_data in value_list["token_count"]
+                token_data for value_list in cls._history_dict.values() for token_data in value_list["token_count"]
             )
 
         for entry in source:
