@@ -8,6 +8,9 @@ from autogen.agentchat.assistant_agent import AssistantAgent
 from autogen.agentchat.user_proxy_agent import UserProxyAgent
 import autogen
 
+
+# n-results는 max로 검색해볼 chunk의 개수를 의미함. 가장 연관성이 높은 것부터 n_includechunk 만큼 보여주고, 만약 연관없다고 판단될경우 AI 가 update context call을 말하면 그다음 n_includechunk로 넘어가는 구조임.
+
 RAG_FUNCTIONS = [
     {
         "name": "ask_DB",
@@ -54,7 +57,7 @@ def ask_DB(message):
     )
 
     assistant = RetrieveAssistantAgent(
-        name="assistant",
+        name="DB_Answer",
         system_message="You are a helpful assistant.",
         is_termination_msg=termination_msg,
         llm_config={
@@ -64,7 +67,7 @@ def ask_DB(message):
         },
     )
 
-    ask.initiate_chat(assistant, n_results=20, problem="Who made cameco?")
+    ask.initiate_chat(assistant, n_results=20, problem=message)
     return assistant.last_message()
 
 
@@ -105,6 +108,3 @@ class RAGFunctioncallAgent(AssistantAgent):
             raise ValueError(
                 "Message can't be converted into a valid ChatCompletion message. Either content or function_call must be provided."
             )
-
-
-# n-results는 max로 검색해볼 chunk의 개수를 의미함. 가장 연관성이 높은 것부터 n_includechunk 만큼 보여주고, 만약 연관없다고 판단될경우 AI 가 update context call을 말하면 그다음 n_includechunk로 넘어가는 구조임.
