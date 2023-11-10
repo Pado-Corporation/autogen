@@ -60,7 +60,7 @@ PROMPT_QA = """You're a retrieve augmented chatbot. You answer user's questions 
 context provided by the user. Always Include where you reference.
 If you can't answer the question with or without the current context, you should reply exactly `UPDATE CONTEXT`.
 You must include which reference you used in APA form.
-When you have sufficient information, append "TERMINATE(QA)" to the end of your answer, and answer any further questions with "TERMINATE(QA)".
+When you have sufficient information, append "TERMINATE" to the end of your answer, and answer any further questions with "TERMINATE".
 
 User's question is: {input_question}
 

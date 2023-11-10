@@ -30,11 +30,11 @@ except ImportError:
     ERROR = ImportError("please install openai and diskcache to use the autogen.oai subpackage.")
     openai_Completion = object
 logger = logging.getLogger(__name__)
-if not logger.handlers:
-    # Add the console handler.
-    _ch = logging.StreamHandler(stream=sys.stdout)
-    _ch.setFormatter(logger_formatter)
-    logger.addHandler(_ch)
+# if not logger.handlers:
+#     # Add the console handler.
+#     _ch = logging.StreamHandler(stream=sys.stdout)
+#     _ch.setFormatter(logger_formatter)
+#     logger.addHandler(_ch)
 
 
 class Completion(openai_Completion):
@@ -201,7 +201,7 @@ class Completion(openai_Completion):
 
         Try cache first. If not found, call the openai api. If the api call fails, retry after retry_wait_time.
         """
-        logger.debug(f"config : {config}")
+        logger.info(f"{config}")
         config = config.copy()
         openai.api_key_path = config.pop("api_key_path", openai.api_key_path)
         key = get_key(config)
