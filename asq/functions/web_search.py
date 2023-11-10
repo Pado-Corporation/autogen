@@ -6,8 +6,8 @@ _endpoint = config.bing_search_endpoint + "/v7.0/search"
 _headers = {"Ocp-Apim-Subscription-Key": config.openai_api_key}
 
 
-def web_search(query: str, mkt: str = "en-US"):
-    params = {"q": query, "mkt": mkt}
+def web_search(search_term: str, mkt: str = "en-US"):
+    params = {"q": search_term, "mkt": mkt}
 
     try:
         response = requests.get(_endpoint, headers=_headers, params=params)

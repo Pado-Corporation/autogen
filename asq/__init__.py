@@ -1,6 +1,6 @@
 from .jobs import *
 from .functions import *
-from config import Config
+from .config import Config
 import logging
 
 config = Config()
