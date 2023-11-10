@@ -51,7 +51,9 @@ class LocalBasedRAGFunctioncallAgent(AssistantAgent):
         collection_name: str,
         n_max: int = 10,
         n_include: int = 3,
+        client=chromadb.PersistentClient(path="/tmp/chromadb"),
         embedding_function=None,
+        get_or_create=False,  # True면 다무시하고 collection에서 가져옴.
         *args,
         **kwargs
     ):
@@ -68,6 +70,13 @@ class LocalBasedRAGFunctioncallAgent(AssistantAgent):
         self.ask = None
         self.answer = None
         self.collection_name = collection_name
+        self.get_or_create = get_or_create
+        self.client = client
+        if get_or_create == True:
+            self.get_or_create = True
+            self.db_path = None
+        else:
+            self.get_or_create = False
         self.who_sent = None
         self.rag_proxy = UserProxyAgent(
             name="RAG_UserProxy",
@@ -136,10 +145,10 @@ class LocalBasedRAGFunctioncallAgent(AssistantAgent):
                 human_input_mode="NEVER",
                 retrieve_config={
                     "task": "QA",
-                    "docs_path": "/Users/parkgyutae/dev/Pado/ASQ_Summarizer/cameco/",
+                    "docs_path": self.db_path,
                     "chunk_token_size": 4048,
                     "model": config_list[0]["model"],
-                    "client": chromadb.PersistentClient(path="/tmp/chromadb"),
+                    "client": self.client,
                     "collection_name": self.collection_name,
                     "embedding_function": self.ef,
                     "get_or_create": True,
