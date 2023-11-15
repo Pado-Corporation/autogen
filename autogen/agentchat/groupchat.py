@@ -27,6 +27,7 @@ class GroupChat:
     max_round: int = 10
     admin_name: str = "Admin"
     func_call_filter: bool = True
+    group_memory: List = None
 
     @property
     def agent_names(self) -> List[str]:
@@ -66,9 +67,7 @@ Then select the next role from {[agent.name for agent in agents]} to play. Only 
         if self.func_call_filter and self.messages and "function_call" in self.messages[-1]:
             # find agents with the right function_map which contains the function name
             agents = [
-                agent
-                for agent in self.agents
-                if agent.can_execute_function(self.messages[-1]["function_call"]["name"])
+                agent for agent in self.agents if agent.can_execute_function(self.messages[-1]["function_call"]["name"])
             ]
             if len(agents) == 1:
                 # only one agent can execute the function
@@ -150,13 +149,9 @@ class GroupChatManager(ConversableAgent):
         )
         # Order of register_reply is important.
         # Allow sync chat if initiated using initiate_chat
-        self.register_reply(
-            Agent, GroupChatManager.run_chat, config=groupchat, reset_config=GroupChat.reset
-        )
+        self.register_reply(Agent, GroupChatManager.run_chat, config=groupchat, reset_config=GroupChat.reset)
         # Allow async chat if initiated using a_initiate_chat
-        self.register_reply(
-            Agent, GroupChatManager.a_run_chat, config=groupchat, reset_config=GroupChat.reset
-        )
+        self.register_reply(Agent, GroupChatManager.a_run_chat, config=groupchat, reset_config=GroupChat.reset)
 
     def run_chat(
         self,
@@ -248,3 +243,90 @@ class GroupChatManager(ConversableAgent):
             await speaker.a_send(reply, self, request_reply=False)
             message = self.last_message(speaker)
         return True, None
+
+
+class GroupChatMemory(ConversableAgent):
+    """(In preview) A chat manager agent that can manage a group chat of multiple agents."""
+
+    def __init__(
+        self,
+        groupchat: GroupChat,
+        name: Optional[str] = "Cordinator memory",
+        # unlimited consecutive auto reply by default
+        max_consecutive_auto_reply: Optional[int] = sys.maxsize,
+        human_input_mode: Optional[str] = "NEVER",
+        system_message: Optional[str] = "Memory of Cordinator",
+        **kwargs,
+    ):
+        super().__init__(
+            name=name,
+            max_consecutive_auto_reply=max_consecutive_auto_reply,
+            human_input_mode=human_input_mode,
+            system_message=system_message,
+            **kwargs,
+        )
+
+        self.register_reply(Agent, GroupChatMemory._memory_add, config=groupchat, reset_config=GroupChat.reset)
+
+    def _memory_add(
+        self,
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[GroupChat] = None,
+    ) -> Union[str, Dict, None]:
+        """ADD Conversation to Groupchat Memory"""
+        if messages is None:
+            messages = self._oai_messages[sender]
+        message = messages[-1]
+        groupchat = config
+        groupchat.group_memory.append(message)
+        print("added memory is :", message)
+        return True, "Memory Added"
+
+
+class GroupChatMemoryUseAgent(ConversableAgent):
+    """(In preview) A chat manager agent that can manage a group chat of multiple agents."""
+
+    def __init__(
+        self,
+        groupchat: GroupChat,
+        name: Optional[str] = "GroupChatMemoryUseAgent",
+        # unlimited consecutive auto reply by default
+        max_consecutive_auto_reply: Optional[int] = sys.maxsize,
+        human_input_mode: Optional[str] = "NEVER",
+        system_message: Optional[str] = "User Group memory Agent",
+        **kwargs,
+    ):
+        super().__init__(
+            name=name,
+            max_consecutive_auto_reply=max_consecutive_auto_reply,
+            human_input_mode=human_input_mode,
+            system_message=system_message,
+            **kwargs,
+        )
+        self.call_counter = 0
+        self.register_reply(
+            Agent, GroupChatMemoryUseAgent._use_memory_reply, config=groupchat, reset_config=GroupChat.reset
+        )
+
+    def _use_memory_reply(
+        self,
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[GroupChat] = None,
+    ) -> Union[str, Dict, None]:
+        if self.call_counter > 0:
+            return False, None
+        groupchat = config
+        important_memory = "\n".join(groupchat.group_memory)
+        client = self.client
+        if client is None:
+            return False, None
+        if messages is None:
+            messages = self._oai_messages[sender]
+        # TODO: #1143 handle token limit exceeded error
+        response = client.create(
+            context=messages[-1].pop("context", None), messages=self._oai_system_message + important_memory
+        )
+        call_counter += 1
+        return True, client.extract_text_or_function_call(response)[0]
