@@ -4,12 +4,11 @@ import sys
 from chromadb.utils import embedding_functions
 
 import better_exceptions
-from openai import debug
+import autogen
 
 better_exceptions.MAX_LENGTH = None
 
 logger = logging.getLogger(__name__)
-import autogen
 
 logging.basicConfig(
     format="%(asctime)s | %(filename)s:%(lineno)d | %(levelname)s : %(message)s", level=logging.INFO, stream=sys.stdout
