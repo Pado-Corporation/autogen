@@ -13,11 +13,10 @@ from collections import defaultdict
 
 try:
     import openai
-    from openai.error import (
-        ServiceUnavailableError,
+    from openai import (
         RateLimitError,
         APIError,
-        InvalidRequestError,
+        BadRequestError,
         APIConnectionError,
         Timeout,
         AuthenticationError,
@@ -26,9 +25,12 @@ try:
     import diskcache
 
     ERROR = None
-except ImportError:
-    ERROR = ImportError("please install openai and diskcache to use the autogen.oai subpackage.")
+    assert openai.__version__ < "1"
+except (AssertionError, ImportError):
     openai_Completion = object
+    # The autogen.Completion class requires openai<1
+    ERROR = AssertionError("(Deprecated) The autogen.Completion class requires openai<1 and diskcache. ")
+
 logger = logging.getLogger(__name__)
 # if not logger.handlers:
 #     # Add the console handler.
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class Completion(openai_Completion):
-    """A class for OpenAI completion API.
+    """(openai<1) A class for OpenAI completion API.
 
     It also supports: ChatCompletion, Azure OpenAI API.
     """
@@ -111,8 +113,8 @@ class Completion(openai_Completion):
         "prompt": "{prompt}",
     }
 
-    seed = 41
-    cache_path = f".cache/{seed}"
+    cache_seed = 41
+    cache_path = f".cache/{cache_seed}"
     # retry after this many seconds
     retry_wait_time = 10
     # fail a request after hitting RateLimitError for this many seconds
@@ -136,7 +138,7 @@ class Completion(openai_Completion):
             cache_path (str, Optional): The root path for the cache.
                 The complete cache path will be {cache_path}/{seed}.
         """
-        cls.seed = seed
+        cls.cache_seed = seed
         cls.cache_path = f"{cache_path_root}/{seed}"
 
     @classmethod
@@ -147,7 +149,7 @@ class Completion(openai_Completion):
             seed (int, Optional): The integer identifier for the pseudo seed.
                 If omitted, all caches under cache_path_root will be cleared.
             cache_path (str, Optional): The root path for the cache.
-                The complete cache path will be {cache_path}/{seed}.
+                The complete cache path will be {cache_path}/{cache_seed}.
         """
         if seed is None:
             shutil.rmtree(cache_path_root, ignore_errors=True)
@@ -203,7 +205,6 @@ class Completion(openai_Completion):
         """
         logger.info(f"{config}")
         config = config.copy()
-        openai.api_key_path = config.pop("api_key_path", openai.api_key_path)
         key = get_key(config)
         if use_cache:
             response = cls._cache.get(key, None)
@@ -227,10 +228,7 @@ class Completion(openai_Completion):
                     response = openai_completion.create(**config)
                 else:
                     response = openai_completion.create(request_timeout=request_timeout, **config)
-            except (
-                ServiceUnavailableError,
-                APIConnectionError,
-            ):
+            except APIConnectionError:
                 # transient error
                 logger.info(f"retrying in {retry_wait_time} seconds...", exc_info=1)
                 sleep(retry_wait_time)
@@ -268,7 +266,7 @@ class Completion(openai_Completion):
                         f"Failed to get response from openai api due to getting RateLimitError or Timeout for {max_retry_period} seconds."
                     )
                     return response
-            except InvalidRequestError:
+            except BadRequestError:
                 if "azure" in config.get("api_type", openai.api_type) and "model" in config:
                     # azure api uses "engine" instead of "model"
                     config["engine"] = config.pop("model").replace("gpt-3.5-turbo", "gpt-35-turbo")
@@ -584,6 +582,10 @@ class Completion(openai_Completion):
             dict: The optimized hyperparameter setting.
             tune.ExperimentAnalysis: The tuning results.
         """
+        logger.warning(
+            "tuning via Completion.tune is deprecated in pyautogen v0.2 and openai>=1. "
+            "flaml.tune supports tuning more generically."
+        )
         if ERROR:
             raise ERROR
         space = cls.default_search_space.copy()
@@ -720,7 +722,7 @@ class Completion(openai_Completion):
         context: Optional[Dict] = None,
         use_cache: Optional[bool] = True,
         config_list: Optional[List[Dict]] = None,
-        filter_func: Optional[Callable[[Dict, Dict, Dict], bool]] = None,
+        filter_func: Optional[Callable[[Dict, Dict], bool]] = None,
         raise_on_ratelimit_or_timeout: Optional[bool] = True,
         allow_format_str_template: Optional[bool] = False,
         **config,
@@ -747,18 +749,18 @@ class Completion(openai_Completion):
                     "model": "gpt-4",
                     "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                     "api_type": "azure",
-                    "api_base": os.environ.get("AZURE_OPENAI_API_BASE"),
+                    "base_url": os.environ.get("AZURE_OPENAI_API_BASE"),
                     "api_version": "2023-03-15-preview",
                 },
                 {
                     "model": "gpt-3.5-turbo",
                     "api_key": os.environ.get("OPENAI_API_KEY"),
                     "api_type": "open_ai",
-                    "api_base": "https://api.openai.com/v1",
+                    "base_url": "https://api.openai.com/v1",
                 },
                 {
                     "model": "llama-7B",
-                    "api_base": "http://127.0.0.1:8080",
+                    "base_url": "http://127.0.0.1:8080",
                     "api_type": "open_ai",
                 }
             ],
@@ -766,7 +768,7 @@ class Completion(openai_Completion):
         )
         ```
 
-            filter_func (Callable, Optional): A function that takes in the context, the config and the response and returns a boolean to indicate whether the response is valid. E.g.,
+            filter_func (Callable, Optional): A function that takes in the context and the response and returns a boolean to indicate whether the response is valid. E.g.,
 
         ```python
         def yes_or_no_filter(context, config, response):
@@ -783,7 +785,7 @@ class Completion(openai_Completion):
                 Besides the parameters for the openai API call, it can also contain:
                 - `max_retry_period` (int): the total time (in seconds) allowed for retrying failed requests.
                 - `retry_wait_time` (int): the time interval to wait (in seconds) before retrying a failed request.
-                - `seed` (int) for the cache. This is useful when implementing "controlled randomness" for the completion.
+                - `cache_seed` (int) for the cache. This is useful when implementing "controlled randomness" for the completion.
 
         Returns:
             Responses from OpenAI API, with additional fields.
@@ -792,6 +794,11 @@ class Completion(openai_Completion):
                 - `config_id`: the index of the config in the config_list that is used to generate the response.
                 - `pass_filter`: whether the response passes the filter function. None if no filter is provided.
         """
+        logger.warning(
+            "Completion.create is deprecated in pyautogen v0.2 and openai>=1. "
+            "The new openai requires initiating a client for inference. "
+            "Please refer to https://microsoft.github.io/autogen/docs/Use-Cases/enhanced_inference#api-unification"
+        )
         if ERROR:
             raise ERROR
 
@@ -820,16 +827,14 @@ class Completion(openai_Completion):
                     )
                     if response == -1:
                         return response
-                    pass_filter = filter_func is None or filter_func(
-                        context=context, base_config=config, response=response
-                    )
+                    pass_filter = filter_func is None or filter_func(context=context, response=response)
                     if pass_filter or i == last:
                         response["cost"] = cost + response["cost"]
                         response["config_id"] = i
                         response["pass_filter"] = pass_filter
                         return response
                     cost += response["cost"]
-                except (AuthenticationError, RateLimitError, Timeout, InvalidRequestError):
+                except (AuthenticationError, RateLimitError, Timeout, BadRequestError):
                     logger.debug(f"failed with config {i}", exc_info=1)
                     if i == last:
                         raise
@@ -838,11 +843,11 @@ class Completion(openai_Completion):
             return cls._get_response(
                 params, raise_on_ratelimit_or_timeout=raise_on_ratelimit_or_timeout, use_cache=False
             )
-        seed = cls.seed
-        if "seed" in params:
-            cls.set_cache(params.pop("seed"))
+        cache_seed = cls.cache_seed
+        if "cache_seed" in params:
+            cls.set_cache(params.pop("cache_seed"))
         with diskcache.Cache(cls.cache_path) as cls._cache:
-            cls.set_cache(seed)
+            cls.set_cache(cache_seed)
             return cls._get_response(params, raise_on_ratelimit_or_timeout=raise_on_ratelimit_or_timeout)
 
     @classmethod
@@ -1181,6 +1186,12 @@ class Completion(openai_Completion):
                 while the compact history dict has a linear size.
             reset_counter (bool): whether to reset the counter of the number of API calls.
         """
+        logger.warning(
+            "logging via Completion.start_logging is deprecated in pyautogen v0.2. "
+            "logging via OpenAIWrapper will be added back in a future release."
+        )
+        if ERROR:
+            raise ERROR
         cls._history_dict = {} if history_dict is None else history_dict
         cls._history_compact = compact
         cls._count_create = 0 if reset_counter or cls._count_create is None else cls._count_create
@@ -1192,7 +1203,7 @@ class Completion(openai_Completion):
 
 
 class ChatCompletion(Completion):
-    """A class for OpenAI API ChatCompletion. Share the same API as Completion."""
+    """(openai<1) A class for OpenAI API ChatCompletion. Share the same API as Completion."""
 
     default_search_space = Completion.default_search_space.copy()
     default_search_space["model"] = tune.choice(["gpt-3.5-turbo", "gpt-4"])
